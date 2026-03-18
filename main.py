@@ -34,16 +34,34 @@ async def websocket_endpoint(websocket: WebSocket):
                 results = model(frame, conf=0.5)
                 
                 counts = {"round": 0, "oval": 0}
+                detections = [] # เพิ่ม list สำหรับเก็บข้อมูลพิกัด (Labels)
+                
                 for r in results:
-                    for c in r.boxes.cls:
-                        name = model.names[int(c)]
-                        if "round" in name.lower(): counts["round"] += 1
-                        elif "oval" in name.lower(): counts["oval"] += 1
+                    # วนลูปผ่าน box แต่ละอันเพื่อเอาทั้งคลาสและพิกัด
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        name = model.names[cls_id]
+                        
+                        # นับจำนวนตามประเภท
+                        if "round" in name.lower(): 
+                            counts["round"] += 1
+                        elif "oval" in name.lower(): 
+                            counts["oval"] += 1
+                            
+                        # ดึงพิกัดแบบ Normalized (0-1) [x_center, y_center, width, height]
+                        # การใช้ .xywhn จะทำให้ Frontend เอาไปคำนวณวาดกรอบได้ง่าย ไม่ว่าวิดีโอจะสัดส่วนไหน
+                        detections.append({
+                            "class": name,
+                            "box": box.xywhn[0].tolist(),
+                            "conf": float(box.conf[0])
+                        })
 
+                # ส่งจำนวนรวม และพิกัดทั้งหมด กลับไปให้ Frontend
                 await websocket.send_json({
                     "round": counts["round"],
                     "oval": counts["oval"],
-                    "total": counts["round"] + counts["oval"]
+                    "total": counts["round"] + counts["oval"],
+                    "labels": detections # เพิ่มส่วนนี้เข้ามา
                 })
     except Exception as e:
         print(f"Websocket Error: {e}")
